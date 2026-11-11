@@ -193,7 +193,7 @@ textarea,select{border-radius:12px;font-family:var(--body)}
 
 <div class="wrap">
 <header class="top"><div class="brand"><svg viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="7.5"/><path d="M9.5 23V10l6.5 8.2L22.5 10v13" fill="none" stroke-width="2.7" stroke-linecap="round" stroke-linejoin="round"/><defs><linearGradient id="dga" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ffb020"/><stop offset=".55" stop-color="#ff5c28"/><stop offset="1" stop-color="#f2367f"/></linearGradient></defs><circle cx="24.6" cy="9.2" r="1.85" fill="url(#dga)"/></svg><b>MAR <span>Exam 3 Room</span></b></div><div class="sp"></div><p class="me"><span>Studying as</span> <b id="who"></b> <button class="linkbtn" id="switch">Switch</button></p></header>
-<div class="hero"><span class="eyebrow">MAR 3023 · Module 3</span><h1>Study for Exam 3<i aria-hidden="true"></i></h1><p>Products, new products, branding, services, channels and retailing. Batches of 10 that lean on what you miss, and every miss asks you why. <span class="sync" id="sync"></span></p></div>
+<div class="hero"><span class="eyebrow">MAR 3023 · Module 3</span><h1>Study for Exam 3<i aria-hidden="true"></i></h1><p>Products, new products, branding, services, channels and retailing. Batches of 10 that lean harder on whatever you miss. <span class="sync" id="sync"></span></p></div>
 <nav class="tabs" role="tablist">
   <button class="tab" role="tab" aria-selected="true" data-v="drill">Drill</button>
   <button class="tab" role="tab" aria-selected="false" data-v="exam">Practice exam</button>
@@ -659,7 +659,6 @@ function record(id,picked){
   const q=QBY[id]; const ok=picked===q.a;
   const r=ST.recs[id]||{r:0,w:0,h:[],lb:0,why:[]}; if(!r.why) r.why=[];
   ok?r.r++:r.w++; r.h=r.h.concat(ok?1:0).slice(-8); r.lb=ST.batch;
-  if(!ok) r.pend={p:q.o[picked]??"(no answer)",at:new Date().toISOString()};
   ST.recs[id]=r; return ok;
 }
 function saveWhy(id,text){
@@ -668,7 +667,7 @@ function saveWhy(id,text){
   r.why=(r.why||[]).concat({t:text.trim(),p:p.p,c:q.o[q.a],at:p.at}).slice(-10); delete r.pend;
   saveLocal(); pushRec(id);
 }
-const needsWhy=id=>{const r=recOf(id);return !!(r&&r.pend)};
+const needsWhy=()=>false; // the typed-reason step was removed; old saved reasons still show
 
 // ---------- adaptive model ----------
 function topicStats(t){
@@ -876,7 +875,7 @@ function renderDrill(){
   if(given!==undefined){const ok=given===q.a; const waiting=!ok&&needsWhy(q.id);
     h+=`<div class="fb ${ok?"":"no"}"><h3>${ok?"Correct":"Not quite. The answer is "+L[q.a]+": "+esc(q.o[q.a])}</h3><p>${esc(q.x)}</p><div class="ref">Source: ${esc(q.ref)}</div>${slideBtns(q)}</div>`;
     if(waiting) h+=whyBox(q.id);
-    else{ if(!ok&&lastWhy(q.id)) h+=`<div class="saved"><b>Your reason</b>${esc(lastWhy(q.id))}</div>`;
+    else{ if(!ok&&lastWhy(q.id)) h+=`<div class="saved"><b>Your earlier reason</b>${esc(lastWhy(q.id))}</div>`;
       h+=`<div class="actions"><button class="btn" id="next">${c.idx+1<c.ids.length?"Next question":"See batch results"}</button><span class="hint">Enter for next</span></div>`; }
   }else h+=`<div class="actions"><span class="hint">Tap an answer, or press A to ${L[q.o.length-1]}.</span></div>`;
   V.innerHTML=h+`</div>`;
@@ -895,7 +894,7 @@ function renderStart(){
   V.innerHTML=`<div class="card"><span class="eyebrow">${seen?"Ready for batch "+(ST.batch+1):"Start here"}</span>
   <h2 style="margin-top:6px">${seen?"Next batch, weighted to your weak spots":"First batch: a quick diagnostic"}</h2>
   <p>${seen?"The next 10 questions come mostly from topics you are missing, plus questions you got wrong, which keep coming back until you get them right three times in a row. One question checks a topic you already know so it stays fresh.":"10 questions spread across all six lecture days so the drill can see where you stand. After that, every batch leans toward what you miss."}</p>
-  <p><b>When you miss a question</b>, you’ll see the right answer and a plain explanation, then type a sentence about why you missed it. Writing it down is what makes it stick. Your reasons are saved in “My misses.”</p>
+  <p><b>When you miss a question</b>, you’ll see the right answer and a plain explanation before moving on. Every miss is listed in “My misses.”</p>
   <p class="hint">${Qs.length} questions covering every topic on the Exam 3 review sheet, written in Dr. Brady’s style (named scenarios, look-alike choices, “NOT” questions), plus the sample quiz questions and easy-number retail math.</p>
   <div class="actions"><button class="btn" id="go">Start batch ${ST.batch+1}</button>${nm?`<button class="btn ghost" id="gomiss">Redo ${Math.min(nm,BATCH)} missed questions</button>`:""}</div></div>`;
   document.getElementById("go").onclick=()=>{buildBatch();renderDrill()};
@@ -912,7 +911,7 @@ function renderSummary(){
   <div class="sumgrid"><div><div class="big">${right}/${ids.length}</div><div class="hint">correct this batch</div></div>
   <div><b>Next batch will focus on</b><ul class="plain">${weakest.length?weakest.map(t=>`<li>${esc(TOPICS[t].n)} ${chip(ts[t].status)}</li>`).join(""):"<li>Nothing weak right now. It will mix in topics you have not seen.</li>"}${unseen?`<li class="hint">${unseen} topics not tried yet</li>`:""}</ul></div></div>`;
   h+=`<h2>Topics in this batch</h2>`+touched.map(t=>{const b=c.before[t]??ts[t].m,a=ts[t].m;const d=Math.round((a-b)*100);return `<div class="trow"><div class="nm">${esc(TOPICS[t].n)} ${chip(ts[t].status)}</div><div class="bar"><i class="${ts[t].status}" style="width:${Math.round(a*100)}%"></i></div><div class="tnum">${d>0?"+":""}${d}</div></div>`}).join("");
-  if(missed.length) h+=`<h2>What you missed, and why</h2><div class="missed">${missed.map(id=>{const q=QBY[id];return `<div class="mrow"><b>${esc(q.q)}</b><span class="ans">Answer: ${esc(q.o[q.a])}</span>${lastWhy(id)?`<span><span class="hint">Your reason:</span> ${esc(lastWhy(id))}</span>`:""}${slideBtns(q)}</div>`}).join("")}</div><p class="hint">Read your reasons once more. These questions come back until you get each one right three times in a row.</p>`;
+  if(missed.length) h+=`<h2>What you missed</h2><div class="missed">${missed.map(id=>{const q=QBY[id];return `<div class="mrow"><b>${esc(q.q)}</b><span class="ans">Answer: ${esc(q.o[q.a])}</span>${lastWhy(id)?`<span><span class="hint">Your reason:</span> ${esc(lastWhy(id))}</span>`:""}${slideBtns(q)}</div>`}).join("")}</div><p class="hint">These questions come back until you get each one right three times in a row.</p>`;
   h+=`<div class="actions"><button class="btn" id="go">Start batch ${ST.batch+1}</button><button class="btn ghost" id="pg">See all progress</button></div></div>`;
   V.innerHTML=h;
   document.getElementById("go").onclick=()=>{ST.lastBatch=c.ids.slice();buildBatch();renderDrill();window.scrollTo({top:0})};
@@ -932,7 +931,7 @@ function buildExam(){
 function renderExam(){
   const E=ST.exam;
   if(!E){V.innerHTML=`<div class="card"><span class="eyebrow">Like the real exam</span><h2 style="margin-top:6px">40-question practice exam</h2>
-    <p>The real exam is 40 multiple-choice questions. This one draws from all six lecture days (more from Day 10 and Day 12, which have the most material). No answers are shown until you finish. Then you get a score for each day, and you write a reason for each miss before starting another.</p>
+    <p>The real exam is 40 multiple-choice questions. This one draws from all six lecture days (more from Day 10 and Day 12, which have the most material). No answers are shown until you finish. Then you get a score for each day and every miss explained.</p>
     <p class="hint">Your answers also count toward the drill, so anything you miss here shows up more in your batches.</p>
     <div class="actions"><button class="btn" id="go">Start practice exam</button></div></div>`;
     document.getElementById("go").onclick=()=>{buildExam();renderExam()}; return;}
@@ -964,12 +963,12 @@ function renderExamResults(){
     h+=`<li>${esc(SECS[s])}: ${r}/${ids.length} ${chip(f>=.8?"solid":f>=.6?"shaky":"weak")}</li>`}
   h+=`</ul></div></div><div class="qgrid">${E.ids.map((id,i)=>`<button class="${ok(id)?"ok":"no"}" data-j="${i}" aria-label="Question ${i+1}" tabindex="-1">${i+1}</button>`).join("")}</div></div>`;
   if(missed.length){
-    h+=`<div class="card"><span class="eyebrow">${left?left+" of "+missed.length+" still need a reason":"All "+missed.length+" misses explained"}</span><h2 style="margin-top:6px">Explain each miss</h2><p class="hint">Read the right answer and the explanation, then write why you got it wrong. You can start a new exam or drill once every miss has a reason.</p><div class="missed">`;
+    h+=`<div class="card"><span class="eyebrow">${missed.length} missed</span><h2 style="margin-top:6px">What you missed</h2><p class="hint">Read the right answer and the explanation for each one. These questions come back in your drill batches.</p><div class="missed">`;
     missed.forEach(id=>{const q=QBY[id];const a=E.ans[id];
       h+=`<div id="m-${id}" class="mrow"><span class="src">${dayOf(q)} · ${esc(TOPICS[q.t].n)}</span><b>${esc(q.q)}</b>
       <span class="you">${a===undefined?"Not answered":"You said "+esc(q.o[a])}</span><span class="ans">Answer: ${esc(q.o[q.a])}</span>
       <p class="note" style="color:var(--ink)">${esc(q.x)} <span class="src">${esc(q.ref)}</span></p>${slideBtns(q)}
-      ${needsWhy(id)?whyBox(id,"Why did you miss this one?"):`<div class="saved"><b>Your reason</b>${esc(lastWhy(id))}</div>`}</div>`});
+      ${lastWhy(id)?`<div class="saved"><b>Your earlier reason</b>${esc(lastWhy(id))}</div>`:""}</div>`});
     h+=`</div></div>`;
   }
   h+=`<div class="actions"><button class="btn" id="again" ${left?"disabled":""}>Take a new practice exam</button><button class="btn ghost" id="todrill" ${left?"disabled":""}>Drill my weak spots</button>${left?`<span class="hint">Write a reason for the ${left} remaining miss${left>1?"es":""} first.</span>`:""}</div>`;
@@ -982,14 +981,14 @@ function renderExamResults(){
 // ---------- my misses ----------
 let missFilter="all"; try{missFilter=localStorage.getItem(KEY+"-mf")||"all"}catch(e){}
 function renderMisses(){
-  const all=missedIds().filter(id=>(recOf(id).why||[]).length||needsWhy(id));
+  const all=missedIds();
   const ids=all.filter(id=>missFilter==="all"||TOPICS[QBY[id].t].s===missFilter)
     .sort((a,b)=>{const wa=recOf(a).why||[],wb=recOf(b).why||[];return String((wb[wb.length-1]||{}).at||"").localeCompare(String((wa[wa.length-1]||{}).at||""))});
   let h=`<div class="card"><span class="eyebrow">Your own words</span><h2 style="margin-top:6px">My misses</h2>
-  <p>Every question you’ve missed, with the reason you wrote. Reading your own explanations is a fast way to review the night before the exam.</p>
+  <p>Every question you’ve missed, with the right answer and explanation. A fast way to review the night before the exam.</p>
   <div class="actions" style="margin-top:8px"><label class="hint" for="mf">Show</label><select id="mf"><option value="all">All days (${all.length})</option>${SEC_ORDER.map(s=>{const n=all.filter(id=>TOPICS[QBY[id].t].s===s).length;return `<option value="${s}" ${missFilter===s?"selected":""}>${esc(SECS[s])} (${n})</option>`}).join("")}</select>
   ${missedIds().filter(id=>!retired(id)).length?`<button class="btn sm" id="redo">Drill these again</button>`:""}</div></div>`;
-  if(!ids.length) h+=`<div class="card"><p>${all.length?"No misses for this day yet.":"No misses yet. When you miss a question in the drill or the practice exam, it lands here with the reason you typed."}</p></div>`;
+  if(!ids.length) h+=`<div class="card"><p>${all.length?"No misses for this day yet.":"No misses yet. When you miss a question in the drill or the practice exam, it lands here."}</p></div>`;
   else h+=`<div class="card"><div class="missed">${ids.map(id=>{const q=QBY[id],r=recOf(id);const st=retired(id)?chip("solid","Fixed: right 3× in a row"):chip(r.h[r.h.length-1]?"shaky":"weak",r.h[r.h.length-1]?"Got it right last time":"Still missing");
     return `<div class="mrow"><span class="src">${dayOf(q)} · ${esc(TOPICS[q.t].n)} · missed ${r.w}×</span> <span>${st}</span><b>${esc(q.q)}</b><span class="ans">Answer: ${esc(q.o[q.a])}</span>
     ${(r.why||[]).slice().reverse().map(w=>`<div class="saved"><b>You picked “${esc(w.p)}”${w.at?" · "+esc(new Date(w.at).toLocaleDateString()):""}</b>${esc(w.t)}</div>`).join("")}

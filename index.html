@@ -19,6 +19,7 @@ header p{margin:6px 0 0;color:var(--muted);font-size:14px}
 .tab[aria-selected="true"]{color:var(--ink);border-color:var(--accent)}
 .tab:focus-visible,.btn:focus-visible,.opt:focus-visible,textarea:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 .eyebrow{font:600 12px var(--mono);letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+.timer{font:600 15px/1 ui-monospace,Consolas,monospace;padding:5px 10px;border-radius:999px;border:1px solid var(--line);font-variant-numeric:tabular-nums}.timer.low{color:#c53030;border-color:#c53030}.timer.out{background:#c53030;color:#fff;border-color:#c53030}
 .batchbar{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px 16px;margin-bottom:12px}
 .pips{display:flex;gap:4px;flex-wrap:wrap}
 .pip{width:22px;height:6px;border-radius:3px;background:var(--line)}
@@ -838,7 +839,7 @@ const V=document.getElementById("view"); let view="drill";
 const esc=s=>String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
 const chip=(st,label)=>`<span class="chip ${st}">${label||({new:"New",weak:"Weak",shaky:"Shaky",solid:"Solid"})[st]}</span>`;
 const dayOf=q=>SECS[TOPICS[q.t].s].split(" · ")[0];
-function render(){ if(!PLAYER){V.innerHTML=`<div class="card"><span class="eyebrow">Start here</span><h2 style="margin-top:6px">Type your name to begin</h2><p>Progress is saved under your name.</p><div class="actions"><button class="btn" id="askn">Enter my name</button></div></div>`;document.getElementById("askn").onclick=askName;return}
+function render(){ stopTimer(); if(!PLAYER){V.innerHTML=`<div class="card"><span class="eyebrow">Start here</span><h2 style="margin-top:6px">Type your name to begin</h2><p>Progress is saved under your name.</p><div class="actions"><button class="btn" id="askn">Enter my name</button></div></div>`;document.getElementById("askn").onclick=askName;return}
   document.querySelectorAll(".tab").forEach(b=>b.setAttribute("aria-selected",b.dataset.v===view)); ({drill:renderDrill,exam:renderExam,misses:renderMisses,progress:renderProgress,guide:renderGuide})[view](); }
 function whyBox(id,label){
   return `<div class="why"><label for="why-${id}">${label||"Why did you miss this one?"}</label>
@@ -859,33 +860,44 @@ function wireWhy(after){
 }
 function lastWhy(id){const r=recOf(id);const w=r&&r.why&&r.why[r.why.length-1];return w?w.t:""}
 
+// ---------- timer: 2 minutes per question ----------
+const QSEC=120; let TICK=null;
+function stopTimer(){if(TICK){clearInterval(TICK);TICK=null}}
+const fmt=ms=>{const t=Math.max(0,Math.ceil(ms/1000));return Math.floor(t/60)+":"+String(t%60).padStart(2,"0")};
+function runTimer(endAt,lowMs,onEnd){stopTimer(); const el=document.getElementById("timer"); if(!el) return;
+  const tick=()=>{const left=endAt-Date.now(); el.textContent=fmt(left); el.classList.toggle("low",left<=lowMs);
+    if(left<=0){stopTimer(); onEnd()}};
+  tick(); if(endAt>Date.now()) TICK=setInterval(tick,250);}
 // ---------- drill ----------
 function renderDrill(){
+  stopTimer();
   if(!ST.cur||ST.cur.ids.length===0) return renderStart();
   const c=ST.cur; if(c.idx>=c.ids.length) return renderSummary();
   const q=QBY[c.ids[c.idx]]; if(!q){c.idx++;return renderDrill()}
   const st=topicStats(q.t); const given=c.ans[q.id];
   const pips=c.ids.map((id,i)=>{const a=c.ans[id];return `<span class="pip ${a===undefined?(i===c.idx?"cur":""):(QBY[id]&&a===QBY[id].a?"ok":"no")}"></span>`}).join("");
-  let h=`<div class="batchbar"><span class="eyebrow">${c.label?esc(c.label)+" · ":""}Batch ${c.n} · Question ${c.idx+1} of ${c.ids.length}</span><div class="pips" aria-hidden="true">${pips}</div></div>
+  let h=`<div class="batchbar"><span class="eyebrow">${c.label?esc(c.label)+" · ":""}Batch ${c.n} · Question ${c.idx+1} of ${c.ids.length}</span><div class="pips" aria-hidden="true">${pips}</div>${given===undefined?`<span class="timer" id="timer" title="2 minutes per question">2:00</span>`:given===-1?`<span class="timer out">Time’s up</span>`:""}</div>
   <div class="card"><div class="qmeta">${chip(st.status,TOPICS[q.t].n)}<span class="src">${dayOf(q)}${q.src!=="New"?" · "+esc(q.src):""}</span></div>
   <p class="qtext">${esc(q.q)}</p><div class="opts" role="group" aria-label="Answer choices">`;
   q.o.forEach((o,i)=>{let cls="";if(given!==undefined){if(i===q.a)cls="right";else if(i===given)cls="wrong"}
     h+=`<button class="opt ${cls}" data-i="${i}" ${given!==undefined?"disabled":""}><span class="L">${L[i]}</span><span>${esc(o)}</span></button>`});
   h+=`</div>`;
   if(given!==undefined){const ok=given===q.a; const waiting=!ok&&needsWhy(q.id);
-    h+=`<div class="fb ${ok?"":"no"}"><h3>${ok?"Correct":"Not quite. The answer is "+L[q.a]+": "+esc(q.o[q.a])}</h3><p>${esc(q.x)}</p><div class="ref">Source: ${esc(q.ref)}</div>${slideBtns(q)}</div>`;
+    h+=`<div class="fb ${ok?"":"no"}"><h3>${ok?"Correct":(given===-1?"Time’s up. ":"Not quite. ")+"The answer is "+L[q.a]+": "+esc(q.o[q.a])}</h3><p>${esc(q.x)}</p><div class="ref">Source: ${esc(q.ref)}</div>${slideBtns(q)}</div>`;
     if(waiting) h+=whyBox(q.id);
     else{ if(!ok&&lastWhy(q.id)) h+=`<div class="saved"><b>Your earlier reason</b>${esc(lastWhy(q.id))}</div>`;
       h+=`<div class="actions"><button class="btn" id="next">${c.idx+1<c.ids.length?"Next question":"See batch results"}</button><span class="hint">Enter for next</span></div>`; }
   }else h+=`<div class="actions"><span class="hint">Tap an answer, or press A to ${L[q.o.length-1]}.</span></div>`;
   V.innerHTML=h+`</div>`;
   V.querySelectorAll(".opt").forEach(b=>b.onclick=()=>answer(+b.dataset.i));
+  if(given===undefined){ if(c.tq!==q.id||!c.tend){c.tq=q.id;c.tend=Date.now()+QSEC*1000;saveLocal()}
+    runTimer(c.tend,20000,()=>{if(ST.cur===c&&c.ids[c.idx]===q.id&&view==="drill") answer(-1)}); }
   wireWhy(()=>{renderDrill(); const n=document.getElementById("next"); if(n) n.focus({preventScroll:true})});
   const ta=V.querySelector(".why textarea"); if(ta) ta.focus({preventScroll:true});
   const n=document.getElementById("next"); if(n){n.onclick=next;if(!ta)n.focus({preventScroll:true})}
 }
 function answer(i){
-  const c=ST.cur; const q=QBY[c.ids[c.idx]]; if(c.ans[q.id]!==undefined) return;
+  stopTimer(); const c=ST.cur; const q=QBY[c.ids[c.idx]]; if(c.ans[q.id]!==undefined) return;
   c.ans[q.id]=i; record(q.id,i); saveLocal(); pushRec(q.id); renderDrill();
 }
 function next(){const c=ST.cur; const id=c.ids[c.idx]; if(needsWhy(id)) return; c.idx++;saveLocal();renderDrill();window.scrollTo({top:0})}
@@ -894,6 +906,7 @@ function renderStart(){
   V.innerHTML=`<div class="card"><span class="eyebrow">${seen?"Ready for batch "+(ST.batch+1):"Start here"}</span>
   <h2 style="margin-top:6px">${seen?"Next batch, weighted to your weak spots":"First batch: a quick diagnostic"}</h2>
   <p>${seen?"The next 10 questions come mostly from topics you are missing, plus questions you got wrong, which keep coming back until you get them right three times in a row. One question checks a topic you already know so it stays fresh.":"10 questions spread across all six lecture days so the drill can see where you stand. After that, every batch leans toward what you miss."}</p>
+  <p><b>You get 2 minutes per question.</b> If the timer runs out, it counts as a miss.</p>
   <p><b>When you miss a question</b>, you’ll see the right answer and a plain explanation before moving on. Every miss is listed in “My misses.”</p>
   <p class="hint">${Qs.length} questions covering every topic on the Exam 3 review sheet, written in Dr. Brady’s style (named scenarios, look-alike choices, “NOT” questions), plus the sample quiz questions and easy-number retail math.</p>
   <div class="actions"><button class="btn" id="go">Start batch ${ST.batch+1}</button>${nm?`<button class="btn ghost" id="gomiss">Redo ${Math.min(nm,BATCH)} missed questions</button>`:""}</div></div>`;
@@ -926,18 +939,19 @@ function buildExam(){
     const byT={}; pool.forEach(q=>(byT[q.t]=byT[q.t]||[]).push(q)); const tl=shuffle(Object.keys(byT)); const got=[];
     for(let k=0;got.length<SEC_EXAM[s]&&k<200;k++){const t=tl[k%tl.length]; const q=byT[t].shift(); if(q) got.push(q.id)}
     ids=ids.concat(got); }
-  ST.exam={ids:shuffle(ids),idx:0,ans:{},done:false,n:(ST.exam?.n||0)+1}; saveLocal();
+  ST.exam={ids:shuffle(ids),idx:0,ans:{},done:false,n:(ST.exam?.n||0)+1,end:Date.now()+ids.length*QSEC*1000}; saveLocal();
 }
 function renderExam(){
   const E=ST.exam;
   if(!E){V.innerHTML=`<div class="card"><span class="eyebrow">Like the real exam</span><h2 style="margin-top:6px">40-question practice exam</h2>
+    <p><b>Timed: 80 minutes</b> (2 minutes per question). When time runs out, the exam turns in by itself and blank answers count as wrong.</p>
     <p>The real exam is 40 multiple-choice questions. This one draws from all six lecture days (more from Day 10 and Day 12, which have the most material). No answers are shown until you finish. Then you get a score for each day and every miss explained.</p>
     <p class="hint">Your answers also count toward the drill, so anything you miss here shows up more in your batches.</p>
     <div class="actions"><button class="btn" id="go">Start practice exam</button></div></div>`;
     document.getElementById("go").onclick=()=>{buildExam();renderExam()}; return;}
   if(E.done) return renderExamResults();
   const q=QBY[E.ids[E.idx]]; const given=E.ans[q.id]; const answered=Object.keys(E.ans).length;
-  let h=`<div class="batchbar"><span class="eyebrow">Practice exam ${E.n} · Question ${E.idx+1} of ${E.ids.length}</span><span class="hint">${answered} answered</span></div>
+  let h=`<div class="batchbar"><span class="eyebrow">Practice exam ${E.n} · Question ${E.idx+1} of ${E.ids.length}</span><span class="hint">${answered} answered</span><span class="timer" id="timer" title="80 minutes total, 2 per question">--:--</span></div>
   <div class="card"><div class="qmeta"><span class="src">${dayOf(q)}</span></div><p class="qtext">${esc(q.q)}</p><div class="opts" role="group" aria-label="Answer choices">`;
   q.o.forEach((o,i)=>{h+=`<button class="opt ${given===i?"sel":""}" data-i="${i}"><span class="L">${L[i]}</span><span>${esc(o)}</span></button>`});
   h+=`</div><div class="actions"><button class="btn ghost" id="prev" ${E.idx===0?"disabled":""}>Back</button><button class="btn" id="nxt">${E.idx+1<E.ids.length?"Next":"Review and finish"}</button><button class="btn ghost" id="fin">Finish exam</button><span class="hint" id="finh"></span></div>
@@ -947,11 +961,13 @@ function renderExam(){
   V.querySelectorAll(".qgrid button").forEach(b=>b.onclick=()=>{E.idx=+b.dataset.j;saveLocal();renderExam()});
   document.getElementById("prev").onclick=()=>{E.idx--;saveLocal();renderExam()};
   document.getElementById("nxt").onclick=()=>{if(E.idx+1<E.ids.length){E.idx++;saveLocal();renderExam();window.scrollTo({top:0})}else finishExam()};
+  if(!E.end){E.end=Date.now()+E.ids.length*QSEC*1000;saveLocal()}
+  runTimer(E.end,5*60000,()=>{if(ST.exam===E&&!E.done) finishExam()});
   const fb=document.getElementById("fin"); let armed=false;
   fb.onclick=()=>{const left=E.ids.length-Object.keys(E.ans).length; if(left&&!armed){armed=true;fb.textContent="Tap again to finish";document.getElementById("finh").textContent=left+" unanswered will count as wrong.";return} finishExam()};
 }
 function finishExam(){
-  const E=ST.exam; E.done=true;
+  stopTimer(); const E=ST.exam; E.done=true;
   for(const id of E.ids){ const a=E.ans[id]; record(id,a===undefined?-1:a); pushRec(id); }
   saveLocal(); renderExam(); window.scrollTo({top:0});
 }

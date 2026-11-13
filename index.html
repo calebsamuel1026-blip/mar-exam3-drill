@@ -892,6 +892,12 @@ async function loadPlayer(){
   if(!PLAYER) return; const me=PLAYER.key, seq=++loadSeq; setSync("· loading your saved progress…");
   try{ const remote=await rpc("mar_load",{p_name:cloudName()});
     if(seq!==loadSeq||!PLAYER||PLAYER.key!==me) return;
+    if(remote&&remote.recs&&(+remote.rev||0)>(+ST.rev||0)){
+      // the cloud copy was corrected on purpose (admin edit): replace this device's copy instead of merging
+      ST=Object.assign(S0(),remote); delete ST.name;
+      try{localStorage.setItem(KEY+"-p-"+PLAYER.key,JSON.stringify(ST))}catch(e){}
+      render(); setSync("· progress loaded for "+PLAYER.name+" (updated)"); return;
+    }
     if(remote&&remote.recs){
       let localNewer=false;
       for(const id in remote.recs){const v=remote.recs[id], l=ST.recs[id]; if(!QBY[id]||!v) continue;
